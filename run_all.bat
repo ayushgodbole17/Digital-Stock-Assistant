@@ -1,8 +1,13 @@
 @echo off
 
-echo Activating Conda environment...
-call C:\Users\Ayush\anaconda3\Scripts\activate.bat jarvis2
+REM Load environment variables from .env file
+for /f "tokens=1,2 delims==" %%A in ('type .env') do (
+    if "%%A"=="CONDA_PATH" set CONDA_PATH=%%B
+    if "%%A"=="CONDA_ENV" set CONDA_ENV=%%B
+)
 
+echo Activating Conda environment...
+call %CONDA_PATH% %CONDA_ENV%
 
 echo Running the news fetch script...
 python news_fetch.py
