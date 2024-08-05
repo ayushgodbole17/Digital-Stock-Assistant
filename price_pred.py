@@ -89,15 +89,16 @@ def train_and_forecast(company, symbol):
         data_path = os.path.join(prices_folder, f"{company}_data.csv")
         model_path = os.path.join(prices_folder, f"{company}_model.joblib")
         
+        # Check if the data is up to date
         if not needs_update(data_path):
             logger.info(f"Data for {company} is up to date. Skipping update.")
             print(f"Data for {company} is up to date. Skipping update.")
             return
-
+        
         df = fetch_data(symbol)
         if df is None:
             return
-
+        
         df = df[['Close']]
         df.to_csv(data_path)  # Save the updated data
         y = df['Close']
@@ -119,25 +120,22 @@ def train_and_forecast(company, symbol):
         mape = mean_absolute_percentage_error(y_test, y_pred)
         rmse = np.sqrt(mean_squared_error(y_test, y_pred))
         mae = mean_absolute_error(y_test, y_pred)
-        logger.info(f"MAPE for {company}: {mape:.2f}")
-        logger.info(f"RMSE for {company}: {rmse:.2f}")
-        logger.info(f"MAE for {company}: {mae:.2f}")
-        print(f"MAPE for {company}: {mape:.2f}")
-        print(f"RMSE for {company}: {rmse:.2f}")
-        print(f"MAE for {company}: {mae:.2f}")
-
+        #logger.info(f"MAPE for {company}: {mape:.2f}")
+        #logger.info(f"RMSE for {company}: {rmse:.2f}")
+        #logger.info(f"MAE for {company}: {mae:.2f}")
         # Save the forecast
         y_pred.to_csv(forecast_path, header=True)
-        logger.info(f"Forecast saved for {company} in {forecast_path}")
+        #logger.info(f"Forecast saved for {company} in {forecast_path}")
         print(f"Forecast saved for {company} in {forecast_path}")
 
         # Save the model
         joblib.dump(model, model_path)
-        logger.info(f"Model saved for {company} in {model_path}")
+        #logger.info(f"Model saved for {company} in {model_path}")
         print(f"Model saved for {company} in {model_path}")
     except Exception as e:
         logger.error(f"Error processing {company}: {e}")
         print(f"Error processing {company}: {e}")
+
 
 # Main execution with market open check
 def main():

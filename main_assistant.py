@@ -44,11 +44,18 @@ def listen_for_activation():
     try:
         command = recognizer.recognize_google(audio)
         print(f"Heard for activation: {command}")
-        return command.lower()
+        command = command.lower()
+        
+        # Check for variations
+        if "hey jarvis" in command or "hair jarvis" in command or "hairdress" in command:
+            return "hey jarvis"
+        else:
+            return ""
     except sr.UnknownValueError:
         return ""
     except sr.RequestError:
         return ""
+
 
 def listen_for_command():
     with microphone as source:
@@ -135,6 +142,52 @@ def handle_command(command):
             respond("I could not fetch the article summary. Please try again.")
             print(e)
         return
+    
+    if "portfolio" in command:
+        print("Handling portfolio command")  # Debugging statement
+        try:
+            portfolio_prices = []
+            for company, symbol in company_symbols.items():
+                price = get_stock_price(symbol)
+                portfolio_prices.append(f"{company} ({symbol}) is ${price:.2f}")
+            respond("Here are the current prices in your portfolio:")
+            for price_info in portfolio_prices:
+                respond(price_info)
+                print(price_info)
+        except Exception as e:
+            respond("I could not fetch the portfolio prices. Please try again.")
+            print(f"Error fetching portfolio prices: {e}")
+        return
+
+
+    for key in company_symbols:
+        if key.lower() in command:
+            symbol = company_symbols[key]
+            if "price" in command:
+                try:
+                    price = get_stock_price(symbol)
+                    respond(f"The current price of {key} ({symbol}) is ${price:.2f}")
+                    print(f"The current price of {key} ({symbol}) is ${price:.2f}")
+                except ValueError as ve:
+                    respond(str(ve))
+                    print(ve)
+                except Exception as e:
+                    respond("I could not fetch the stock price. Please try again.")
+                    print(e)
+            elif "predict" in command:
+                try:
+                    predicted_price = fetch_predicted_price(key)
+                    respond(f"The predicted price of {key} ({symbol}) for the next day is ${predicted_price:.2f}")
+                    print(f"The predicted price of {key} ({symbol}) for the next day is ${predicted_price:.2f}")
+                except ValueError as ve:
+                    respond(str(ve))
+                    print(ve)
+                except Exception as e:
+                    respond("I could not fetch the predicted stock price. Please try again.")
+                    print(e)
+
+    respond("Sorry, I don't have data for that company.")
+    print(f"Command not recognized: {command}")
 
     for key in company_symbols:
         if key.lower() in command:
