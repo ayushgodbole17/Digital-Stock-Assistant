@@ -1,4 +1,4 @@
-# Digital-Stock-Assistant
+# P.A.I.G.E. - Portfolio Assistance and Investment Guidance Engine  
 
 About:  
 A financial digital assistant app, inspired by J.A.R.V.I.S.  
