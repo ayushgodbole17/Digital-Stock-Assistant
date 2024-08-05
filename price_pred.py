@@ -66,7 +66,7 @@ def needs_update(file_path):
         return False
 
 # Fetch historical data
-def fetch_data(symbol, start_date="2015-01-01"):
+def fetch_data(symbol, start_date="2010-01-01"):
     end_date = datetime.now().strftime("%Y-%m-%d")
     try:
         stock_data = yf.download(symbol, start=start_date, end=end_date)
@@ -104,7 +104,7 @@ def train_and_forecast(company, symbol):
         y = df['Close']
         
         # Split the data into training and test sets
-        y_train, y_test = temporal_train_test_split(y, test_size=30)
+        y_train, y_test = temporal_train_test_split(y, test_size=10)
         
         # Define the forecasting horizon
         fh = ForecastingHorizon(y_test.index, is_relative=False)

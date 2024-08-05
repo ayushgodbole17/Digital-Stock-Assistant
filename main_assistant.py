@@ -38,16 +38,15 @@ thank_you_responses = ["Of course, mister Stark", "No worries, mister Stark", "Y
 def listen_for_activation():
     with microphone as source:
         recognizer.adjust_for_ambient_noise(source)
-        print("Listening for 'Hey Jarvis'...")
+        print("Listening for 'Hey Jarvis' or 'Hair Jarvis' or 'Hairdress'...")
         audio = recognizer.listen(source)
 
     try:
         command = recognizer.recognize_google(audio)
         print(f"Heard for activation: {command}")
-        command = command.lower()
-        
-        # Check for variations
-        if "hey jarvis" in command or "hair jarvis" in command or "hairdress" in command:
+        # Normalize to lowercase and check for variations
+        accepted_phrases = {"hey jarvis", "hair jarvis", "hairdress"}
+        if any(phrase in command.lower() for phrase in accepted_phrases):
             return "hey jarvis"
         else:
             return ""
@@ -55,7 +54,6 @@ def listen_for_activation():
         return ""
     except sr.RequestError:
         return ""
-
 
 def listen_for_command():
     with microphone as source:
@@ -76,22 +74,44 @@ def respond(text):
     engine.say(text)
     engine.runAndWait()
 
-def get_stock_price(symbol):
+def get_stock_price(symbol, company):
     stock = yf.Ticker(symbol)
-    todays_data = stock.history(period='1d')
+    todays_data = stock.history(period='1d', interval='1m')
+    
     if todays_data.empty:
         raise ValueError(f"No data found for {symbol}")
-    return todays_data['Close'][0]
+
+    print(f"Today's data for {symbol}: {todays_data}")  # Debugging statement
+    latest_price = todays_data['Close'].iloc[-1]
+    print(f"Latest price for {symbol}: {latest_price}")  # Debugging statement
+    
+    # Read the last row from the existing data
+    data_path = os.path.join(prices_folder, f"{company}_data.csv")
+    if os.path.exists(data_path):
+        data_df = pd.read_csv(data_path, index_col=0)
+        previous_close_price = data_df['Close'].iloc[-1]
+        print(f"Previous close price for {company}: {previous_close_price}")  # Debugging statement
+    else:
+        raise ValueError(f"No historical data found for {symbol}")
+    
+    percentage_change = ((latest_price - previous_close_price) / previous_close_price) * 100
+    
+    return latest_price, previous_close_price, percentage_change
 
 def fetch_predicted_price(company):
     try:
         forecast_path = os.path.join(prices_folder, f"{company}_forecast.csv")
-        forecast_df = pd.read_csv(forecast_path)
-        print(f"Columns in {forecast_path}: {forecast_df.columns.tolist()}")
+        data_path = os.path.join(prices_folder, f"{company}_data.csv")
         
-        # Assuming the predicted price is in the last column
+        forecast_df = pd.read_csv(forecast_path)
+        data_df = pd.read_csv(data_path)
+        
         predicted_price = forecast_df.iloc[-1, -1]
-        return predicted_price
+        last_close_price = data_df['Close'].iloc[-1]
+        
+        percentage_change = ((predicted_price - last_close_price) / last_close_price) * 100
+        
+        return predicted_price, percentage_change
     except Exception as e:
         raise ValueError(f"Could not fetch the predicted price for {company}: {e}")
 
@@ -104,6 +124,8 @@ def read_news_from_file(file_path='news/latest_news.json'):
         raise ValueError(f"Could not read the news from file: {e}")
 
 def handle_command(command):
+    print(f"Received command: {command}")  # Debugging statement
+
     if "thank you" in command:
         response = random.choice(thank_you_responses) 
         respond(response)
@@ -142,14 +164,14 @@ def handle_command(command):
             respond("I could not fetch the article summary. Please try again.")
             print(e)
         return
-    
+
     if "portfolio" in command:
         print("Handling portfolio command")  # Debugging statement
         try:
             portfolio_prices = []
             for company, symbol in company_symbols.items():
-                price = get_stock_price(symbol)
-                portfolio_prices.append(f"{company} ({symbol}) is ${price:.2f}")
+                latest_price, previous_close_price, percentage_change = get_stock_price(symbol, company)
+                portfolio_prices.append(f"The current price of {company} ({symbol}) is ${latest_price:.2f}, which is a change of {percentage_change:.2f}% from the previous close.")
             respond("Here are the current prices in your portfolio:")
             for price_info in portfolio_prices:
                 respond(price_info)
@@ -159,15 +181,13 @@ def handle_command(command):
             print(f"Error fetching portfolio prices: {e}")
         return
 
-
-    for key in company_symbols:
-        if key.lower() in command:
-            symbol = company_symbols[key]
+    for company, symbol in company_symbols.items():
+        if company.lower() in command:
             if "price" in command:
                 try:
-                    price = get_stock_price(symbol)
-                    respond(f"The current price of {key} ({symbol}) is ${price:.2f}")
-                    print(f"The current price of {key} ({symbol}) is ${price:.2f}")
+                    latest_price, previous_close_price, percentage_change = get_stock_price(symbol, company)
+                    respond(f"The current price of {company} ({symbol}) is ${latest_price:.2f}, which is a change of {percentage_change:.2f}% from the previous close.")
+                    print(f"The current price of {company} ({symbol}) is ${latest_price:.2f}, which is a change of {percentage_change:.2f}% from the previous close.")
                 except ValueError as ve:
                     respond(str(ve))
                     print(ve)
@@ -176,38 +196,9 @@ def handle_command(command):
                     print(e)
             elif "predict" in command:
                 try:
-                    predicted_price = fetch_predicted_price(key)
-                    respond(f"The predicted price of {key} ({symbol}) for the next day is ${predicted_price:.2f}")
-                    print(f"The predicted price of {key} ({symbol}) for the next day is ${predicted_price:.2f}")
-                except ValueError as ve:
-                    respond(str(ve))
-                    print(ve)
-                except Exception as e:
-                    respond("I could not fetch the predicted stock price. Please try again.")
-                    print(e)
-
-    respond("Sorry, I don't have data for that company.")
-    print(f"Command not recognized: {command}")
-
-    for key in company_symbols:
-        if key.lower() in command:
-            symbol = company_symbols[key]
-            if "price" in command:
-                try:
-                    price = get_stock_price(symbol)
-                    respond(f"The current price of {key} ({symbol}) is ${price:.2f}")
-                    print(f"The current price of {key} ({symbol}) is ${price:.2f}")
-                except ValueError as ve:
-                    respond(str(ve))
-                    print(ve)
-                except Exception as e:
-                    respond("I could not fetch the stock price. Please try again.")
-                    print(e)
-            elif "predict" in command:
-                try:
-                    predicted_price = fetch_predicted_price(key)
-                    respond(f"The predicted price of {key} ({symbol}) for the next day is ${predicted_price:.2f}")
-                    print(f"The predicted price of {key} ({symbol}) for the next day is ${predicted_price:.2f}")
+                    predicted_price, percentage_change = fetch_predicted_price(company)
+                    respond(f"The predicted price of {company} ({symbol}) for the next day is ${predicted_price:.2f}, which is a change of {percentage_change:.2f}%")
+                    print(f"The predicted price of {company} ({symbol}) for the next day is ${predicted_price:.2f}, which is a change of {percentage_change:.2f}%")
                 except ValueError as ve:
                     respond(str(ve))
                     print(ve)
@@ -222,9 +213,11 @@ def handle_command(command):
 # Main loop to listen for "Hey Jarvis" and commands
 while True:
     activation_command = listen_for_activation()
-    if "hey jarvis" in activation_command:
+    if activation_command == "hey jarvis":
         respond("How can I assist you?")
         while True:
             user_command = listen_for_command()
             if user_command:
                 handle_command(user_command)
+                # Continue listening for commands after handling
+                respond("Listening for your next command...")
