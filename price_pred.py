@@ -66,16 +66,20 @@ def needs_update(file_path):
         return False
 
 # Fetch historical data
-def fetch_data(symbol, start_date="2010-01-01"):
+def fetch_data(symbol, start_date=None):
     end_date = datetime.now().strftime("%Y-%m-%d")
+    
+    if start_date is None:
+        start_date = "2010-01-01"  # Default start date if no start_date is provided
+    
     try:
         stock_data = yf.download(symbol, start=start_date, end=end_date)
         if stock_data.empty:
             stock_data = yf.download(symbol)
         stock_data = stock_data.asfreq('B')  # Set the frequency to business days
         stock_data = stock_data.interpolate(method='linear')  # Interpolate missing values
-        logger.info(f"Data for {symbol} starts from {stock_data.index[0].date()} and ends at {stock_data.index[-1].date()}")
-        print(f"Data for {symbol} starts from {stock_data.index[0].date()} and ends at {stock_data.index[-1].date()}")
+        logger.info(f"Data for {symbol} fetched from {start_date} to {stock_data.index[-1].date()}")
+        print(f"Data for {symbol} fetched from {start_date} to {stock_data.index[-1].date()}")
         return stock_data
     except Exception as e:
         logger.error(f"Could not fetch data for {symbol}: {e}")
@@ -95,13 +99,28 @@ def train_and_forecast(company, symbol):
             print(f"Data for {company} is up to date. Skipping update.")
             return
         
-        df = fetch_data(symbol)
-        if df is None:
+        # Get the last date from the existing data
+        if os.path.exists(data_path):
+            existing_data = pd.read_csv(data_path, index_col=0, parse_dates=True)
+            last_date = existing_data.index[-1].date()
+            # Start fetching from the next day
+            start_date = (last_date + timedelta(days=1)).strftime("%Y-%m-%d")
+        else:
+            start_date = "2010-01-01"  # Start from a default date if no existing data
+        
+        # Fetch only the missing data
+        new_data = fetch_data(symbol, start_date)
+        if new_data is None or new_data.empty:
             return
         
-        df = df[['Close']]
-        df.to_csv(data_path)  # Save the updated data
-        y = df['Close']
+        # Combine the old data with the new data
+        if os.path.exists(data_path):
+            combined_data = pd.concat([existing_data, new_data])
+        else:
+            combined_data = new_data
+        
+        combined_data.to_csv(data_path)  # Save the updated data
+        y = combined_data['Close']
         
         # Split the data into training and test sets
         y_train, y_test = temporal_train_test_split(y, test_size=10)
@@ -116,21 +135,12 @@ def train_and_forecast(company, symbol):
         # Make predictions
         y_pred = model.predict(fh)
         
-        # Calculate and print evaluation metrics
-        mape = mean_absolute_percentage_error(y_test, y_pred)
-        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-        mae = mean_absolute_error(y_test, y_pred)
-        #logger.info(f"MAPE for {company}: {mape:.2f}")
-        #logger.info(f"RMSE for {company}: {rmse:.2f}")
-        #logger.info(f"MAE for {company}: {mae:.2f}")
         # Save the forecast
         y_pred.to_csv(forecast_path, header=True)
-        #logger.info(f"Forecast saved for {company} in {forecast_path}")
         print(f"Forecast saved for {company} in {forecast_path}")
 
         # Save the model
         joblib.dump(model, model_path)
-        #logger.info(f"Model saved for {company} in {model_path}")
         print(f"Model saved for {company} in {model_path}")
     except Exception as e:
         logger.error(f"Error processing {company}: {e}")
