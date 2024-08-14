@@ -4,7 +4,7 @@ About:
 A financial digital assistant app, inspired by J.A.R.V.I.S.  
 To run, run the run_all.bat script.  
 
-Current State: (as of 5th August 2024):    
+Current State: (as of 15th August 2024):    
 1) Fetches the stock price for a pre-determind list of companies.
 2) Predicts the next-day price for a particular company, using ARIMA time-series prediction.
 3) Fetches 5 news headlines from a pre-determined list of sources, like Forbes and Bloomberg.
