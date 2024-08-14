@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import random
 import json
+from datetime import datetime, time
 
 # Initialize recognizer and text-to-speech engine
 recognizer = sr.Recognizer()
@@ -38,22 +39,30 @@ thank_you_responses = ["Of course, mister Stark", "No worries, mister Stark", "Y
 def listen_for_activation():
     with microphone as source:
         recognizer.adjust_for_ambient_noise(source)
-        print("Listening for 'Hey Jarvis' or 'Hair Jarvis' or 'Hairdress'...")
+        print("Listening for 'Hey Paige', 'Hey Page', or variations...")
         audio = recognizer.listen(source)
 
     try:
         command = recognizer.recognize_google(audio)
         print(f"Heard for activation: {command}")
         # Normalize to lowercase and check for variations
-        accepted_phrases = {"hey jarvis", "hair jarvis", "hairdress"}
+        accepted_phrases = {"hey paige", "hey page"}
         if any(phrase in command.lower() for phrase in accepted_phrases):
-            return "hey jarvis"
+            return "hey paige"
         else:
             return ""
     except sr.UnknownValueError:
         return ""
     except sr.RequestError:
         return ""
+    
+
+def is_market_open():
+    now = datetime.now()
+    market_open = time(9, 30)
+    market_close = time(16, 0)
+    return market_open <= now.time() <= market_close
+
 
 def listen_for_command():
     with microphone as source:
@@ -74,29 +83,54 @@ def respond(text):
     engine.say(text)
     engine.runAndWait()
 
+from datetime import datetime
+
+
 def get_stock_price(symbol, company):
     stock = yf.Ticker(symbol)
-    todays_data = stock.history(period='1d', interval='1m')
     
-    if todays_data.empty:
-        raise ValueError(f"No data found for {symbol}")
+    if is_market_open():
+        # During market hours, get the latest intraday price
+        todays_data = stock.history(period='1d', interval='1m')
 
-    print(f"Today's data for {symbol}: {todays_data}")  # Debugging statement
-    latest_price = todays_data['Close'].iloc[-1]
-    print(f"Latest price for {symbol}: {latest_price}")  # Debugging statement
-    
-    # Read the last row from the existing data
-    data_path = os.path.join(prices_folder, f"{company}_data.csv")
-    if os.path.exists(data_path):
-        data_df = pd.read_csv(data_path, index_col=0)
-        previous_close_price = data_df['Close'].iloc[-1]
-        print(f"Previous close price for {company}: {previous_close_price}")  # Debugging statement
+        if todays_data.empty:
+            raise ValueError(f"No intraday data found for {symbol}")
+
+        print(f"Today's data for {symbol}: {todays_data}")  # Debugging statement
+
+        latest_price = todays_data['Close'].iloc[-1]
+        opening_price = todays_data['Open'].iloc[0]
+
+        print(f"Latest price for {symbol}: {latest_price}")  # Debugging statement
+        print(f"Opening price for {symbol}: {opening_price}")  # Debugging statement
+
+        percentage_change = ((latest_price - opening_price) / opening_price) * 100
+        return latest_price, opening_price, percentage_change
+
     else:
-        raise ValueError(f"No historical data found for {symbol}")
-    
-    percentage_change = ((latest_price - previous_close_price) / previous_close_price) * 100
-    
-    return latest_price, previous_close_price, percentage_change
+        # Outside market hours, get the last five days' data
+        eod_data = stock.history(period='5d')
+
+        if eod_data.empty or len(eod_data) < 2:
+            raise ValueError(f"Not enough historical data found for {symbol}")
+
+        print(f"End-of-day data for {symbol}: {eod_data}")  # Debugging statement
+
+        closing_price = eod_data['Close'].iloc[-1]
+        opening_price = eod_data['Open'].iloc[-1]
+        previous_closing_price = eod_data['Close'].iloc[-2]
+        previous_opening_price = eod_data['Open'].iloc[-2]
+
+        print(f"Closing price: {closing_price}")  # Debugging statement
+        print(f"Opening price: {opening_price}")  # Debugging statement
+        print(f"Previous day's closing price: {previous_closing_price}")  # Debugging statement
+        print(f"Previous day's opening price: {previous_opening_price}")  # Debugging statement
+
+        percentage_change = ((closing_price - previous_closing_price) / previous_closing_price) * 100
+        return closing_price, previous_closing_price, percentage_change
+
+
+
 
 def fetch_predicted_price(company):
     try:
@@ -185,9 +219,13 @@ def handle_command(command):
         if company.lower() in command:
             if "price" in command:
                 try:
-                    latest_price, previous_close_price, percentage_change = get_stock_price(symbol, company)
-                    respond(f"The current price of {company} ({symbol}) is ${latest_price:.2f}, which is a change of {percentage_change:.2f}% from the previous close.")
-                    print(f"The current price of {company} ({symbol}) is ${latest_price:.2f}, which is a change of {percentage_change:.2f}% from the previous close.")
+                    current_price, reference_price, percentage_change = get_stock_price(symbol, company)
+                    if is_market_open:
+                        time_reference = "today's opening price"
+                    else:
+                        time_reference = "the opening price of the latest trading day"
+                    respond(f"The current price of {company} ({symbol}) is ${current_price:.2f}, which is a change of {percentage_change:.2f}% from {time_reference}.")
+                    print(f"The current price of {company} ({symbol}) is ${current_price:.2f}, which is a change of {percentage_change:.2f}% from {time_reference}.")
                 except ValueError as ve:
                     respond(str(ve))
                     print(ve)
@@ -213,7 +251,7 @@ def handle_command(command):
 # Main loop to listen for "Hey Jarvis" and commands
 while True:
     activation_command = listen_for_activation()
-    if activation_command == "hey jarvis":
+    if activation_command == "hey paige":
         respond("How can I assist you?")
         while True:
             user_command = listen_for_command()
